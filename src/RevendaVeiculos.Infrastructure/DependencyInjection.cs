@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IVeiculoUseCase, VeiculoUseCase>();
         services.AddScoped<ICompradorUseCase, CompradorUseCase>();
         services.AddScoped<ICompraVeiculoSagaOrchestrator, CompraVeiculoSagaOrchestrator>();
+        services.AddScoped<IAuditoriaUseCase, AuditoriaUseCase>();
 
         services.AddHostedService<ReservaExpiracaoBackgroundService>();
 

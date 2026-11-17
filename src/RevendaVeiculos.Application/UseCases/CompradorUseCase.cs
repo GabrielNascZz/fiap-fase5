@@ -247,6 +247,39 @@ public class CompradorUseCase : ICompradorUseCase
         return MapToMascarado(comprador);
     }
 
+    public async Task<InspecaoCriptografiaCompradorResponse> InspecionarCriptografiaEmRepousoAsync(
+        Guid id,
+        string usuarioExecutor,
+        CancellationToken cancellationToken = default)
+    {
+        var comprador = await _compradorRepository.ObterPorIdAsync(id, cancellationToken)
+            ?? throw new RecursoNaoEncontradoException($"Comprador com ID {id} não encontrado.");
+
+        await _auditLogRepository.RegistrarAsync(
+            new AuditLog(
+                usuarioExecutor,
+                "INSPECAO_CRIPTOGRAFIA_LGPD",
+                nameof(Comprador),
+                comprador.Id.ToString(),
+                $"Inspeção técnica de criptografia em repouso (AES-256-GCM + HMAC-SHA256) realizada para o comprador {comprador.Id}."),
+            cancellationToken);
+
+        await _unitOfWork.CommitAsync(cancellationToken);
+
+        return new InspecaoCriptografiaCompradorResponse(
+            comprador.Id,
+            "AES-256-GCM (Nonce 96-bit + Tag 128-bit)",
+            "HMAC-SHA256 (256-bit Blind Index)",
+            comprador.Anonimizado ? "***.***.***-**" : comprador.Cpf.Mascarado(),
+            _cryptoService.Criptografar(comprador.Cpf.Numero),
+            comprador.CpfHash,
+            _cryptoService.Criptografar(comprador.Email.Endereco),
+            comprador.EmailHash,
+            _cryptoService.Criptografar($"{comprador.Rg.NumeroRg}|{comprador.Rg.OrgaoEmissor}|{comprador.Rg.UfEmissor}"),
+            _cryptoService.Criptografar($"{comprador.Cnh.NumeroRegistro}|{comprador.Cnh.Categoria}|{comprador.Cnh.DataValidade:O}"),
+            _cryptoService.Criptografar(comprador.Endereco.FormatadoCompleto()));
+    }
+
     internal static CompradorMascaradoResponse MapToMascarado(Comprador c) =>
         new(
             c.Id,

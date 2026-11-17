@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RevendaVeiculos.Application.DTOs;
 using RevendaVeiculos.Application.Interfaces;
@@ -77,11 +78,14 @@ public class CompradoresController : ControllerBase
     }
 
     /// <summary>
-    /// Acesso controlado e auditado aos dados sensíveis descriptografados do comprador
-    /// (exclusivo para emissão de documentação de retirada/faturamento ou portabilidade do titular LGPD).
+    /// Acesso controlado e auditado (Requer JWT Role: Admin, Vendedor ou DPO) aos dados sensíveis
+    /// descriptografados do comprador para emissão de documentação de retirada/faturamento ou portabilidade LGPD.
     /// </summary>
     [HttpGet("{id:guid}/dados-completos")]
+    [Authorize(Roles = "Admin,Vendedor,DPO")]
     [ProducesResponseType(typeof(CompradorDadosCompletosResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ObterDadosCompletosAuditado(
@@ -95,10 +99,33 @@ public class CompradoresController : ControllerBase
     }
 
     /// <summary>
+    /// Inspeção técnica de segurança (Requer JWT Role: Admin ou DPO) demonstrando os payloads cifrados em repouso
+    /// (AES-256-GCM: ENC:v1:...) e os Blind Indexes (HMAC-SHA256) armazenados para o comprador.
+    /// </summary>
+    [HttpGet("{id:guid}/inspecao-criptografia")]
+    [Authorize(Roles = "Admin,DPO")]
+    [ProducesResponseType(typeof(InspecaoCriptografiaCompradorResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> InspecionarCriptografiaEmRepouso(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var usuario = User.Identity?.Name ?? "AuditorSeguranca";
+        var result = await _compradorUseCase.InspecionarCriptografiaEmRepousoAsync(id, usuario, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Executa a anonimização irreversível dos dados pessoais e sensíveis do titular (Direito ao Esquecimento - Art. 18 da LGPD).
+    /// Requer autenticação JWT com papel Admin ou DPO.
     /// </summary>
     [HttpPost("{id:guid}/anonimizar")]
+    [Authorize(Roles = "Admin,DPO")]
     [ProducesResponseType(typeof(CompradorMascaradoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AnonimizarLgpd(Guid id, CancellationToken cancellationToken)

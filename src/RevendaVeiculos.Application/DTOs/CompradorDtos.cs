@@ -68,3 +68,16 @@ public record CompradorDadosCompletosResponse(
     string FinalidadeTratamento,
     bool Anonimizado,
     DateTime CriadoEm);
+
+public record InspecaoCriptografiaCompradorResponse(
+    Guid CompradorId,
+    string AlgoritmoCriptografia,
+    string AlgoritmoBlindIndex,
+    string CpfMascarado,
+    string CpfCifradoEmRepousoAes256Gcm,
+    string CpfBlindIndexHmacSha256,
+    string EmailCifradoEmRepousoAes256Gcm,
+    string EmailBlindIndexHmacSha256,
+    string RgCifradoEmRepousoAes256Gcm,
+    string CnhCifradaEmRepousoAes256Gcm,
+    string EnderecoCifradoEmRepousoAes256Gcm);

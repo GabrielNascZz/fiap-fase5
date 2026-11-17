@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -281,16 +283,47 @@ public class ApiAndSagaEndToEndTests
         mascarado!.CpfMascarado.Should().Be("***.533.447-**");
         mascarado.EmailMascarado.Should().Be("ro***@lgpd.com.br");
 
-        // Acesso completo auditado para emissão de documentação
+        // 1. Sem Token JWT, o acesso aos dados sensíveis completos deve ser bloqueado (401 Unauthorized)
+        var semTokenResp = await client.GetAsync($"/api/v1/compradores/{mascarado.Id}/dados-completos?motivoAcesso=EmissaoATPVe");
+        semTokenResp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // 2. Com Token JWT de papel insuficiente (Comprador), o endpoint de anonimização DPO deve retornar 403 Forbidden
+        var tokenCompradorResp = await client.PostAsJsonAsync("/api/v1/seguranca/token", new { usuario = "cliente.comum", role = "Comprador" });
+        var tokenCompradorJson = await tokenCompradorResp.Content.ReadFromJsonAsync<JsonElement>();
+        var jwtComprador = tokenCompradorJson.GetProperty("accessToken").GetString()!;
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwtComprador);
+        var forbiddenResp = await client.PostAsync($"/api/v1/compradores/{mascarado.Id}/anonimizar", null);
+        forbiddenResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // 3. Autentica com Token JWT de Admin/DPO para acesso autorizado e auditado
+        var tokenAdminResp = await client.PostAsJsonAsync("/api/v1/seguranca/token", new { usuario = "gabriel.dpo", role = "DPO" });
+        var tokenAdminJson = await tokenAdminResp.Content.ReadFromJsonAsync<JsonElement>();
+        var jwtAdmin = tokenAdminJson.GetProperty("accessToken").GetString()!;
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwtAdmin);
+
+        // 4. Inspeção técnica de criptografia em repouso (AES-256-GCM + Blind Index HMAC-SHA256)
+        var inspecao = await client.GetFromJsonAsync<InspecaoCriptografiaCompradorResponse>(
+            $"/api/v1/compradores/{mascarado.Id}/inspecao-criptografia");
+        inspecao.Should().NotBeNull();
+        inspecao!.CpfCifradoEmRepousoAes256Gcm.Should().StartWith("ENC:v1:");
+        inspecao.CpfBlindIndexHmacSha256.Should().HaveLength(64);
+
+        // 5. Acesso completo auditado para emissão de documentação
         var completoResp = await client.GetFromJsonAsync<CompradorDadosCompletosResponse>(
             $"/api/v1/compradores/{mascarado.Id}/dados-completos?motivoAcesso=EmissaoATPVe");
         completoResp!.CpfFormatado.Should().Be("390.533.447-05");
 
-        // Direito ao esquecimento / Anonimização LGPD
+        // 6. Direito ao esquecimento / Anonimização LGPD
         var anonResp = await client.PostAsync($"/api/v1/compradores/{mascarado.Id}/anonimizar", null);
         anonResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var anonimizado = await anonResp.Content.ReadFromJsonAsync<CompradorMascaradoResponse>();
         anonimizado!.Anonimizado.Should().BeTrue();
         anonimizado.CpfMascarado.Should().Be("***.***.***-**");
+
+        // 7. Verifica trilha de auditoria protegida por RBAC
+        var logs = await client.GetFromJsonAsync<List<AuditLogResponse>>("/api/v1/seguranca/auditoria?limite=20");
+        logs.Should().NotBeEmpty();
+        logs!.Should().Contain(l => l.Acao == "ANONIMIZACAO_DIREITO_ESQUECIMENTO_LGPD");
     }
 }

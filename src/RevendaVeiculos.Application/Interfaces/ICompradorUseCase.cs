@@ -32,4 +32,9 @@ public interface ICompradorUseCase
         Guid id,
         string usuarioExecutor,
         CancellationToken cancellationToken = default);
+
+    Task<InspecaoCriptografiaCompradorResponse> InspecionarCriptografiaEmRepousoAsync(
+        Guid id,
+        string usuarioExecutor,
+        CancellationToken cancellationToken = default);
 }

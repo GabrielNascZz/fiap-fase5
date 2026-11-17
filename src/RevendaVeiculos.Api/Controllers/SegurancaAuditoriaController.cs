@@ -1,9 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
-using RevendaVeiculos.Domain.Interfaces;
+using RevendaVeiculos.Application.DTOs;
+using RevendaVeiculos.Application.Interfaces;
 
 namespace RevendaVeiculos.Api.Controllers;
 
@@ -15,23 +17,24 @@ namespace RevendaVeiculos.Api.Controllers;
 [Produces("application/json")]
 public class SegurancaAuditoriaController : ControllerBase
 {
-    private readonly IAuditLogRepository _auditLogRepository;
+    private readonly IAuditoriaUseCase _auditoriaUseCase;
     private readonly IConfiguration _configuration;
 
     public SegurancaAuditoriaController(
-        IAuditLogRepository auditLogRepository,
+        IAuditoriaUseCase auditoriaUseCase,
         IConfiguration configuration)
     {
-        _auditLogRepository = auditLogRepository;
+        _auditoriaUseCase = auditoriaUseCase;
         _configuration = configuration;
     }
 
     public record GerarTokenRequest(string Usuario = "gabriel.admin", string Role = "Admin");
 
     /// <summary>
-    /// Emite um token JWT Bearer assinado (HMAC-SHA256) para autenticação e controle de acesso baseado em papéis (RBAC).
+    /// Emite um token JWT Bearer assinado (HMAC-SHA256) para autenticação e controle de acesso baseado em papéis (RBAC: Admin, Vendedor, DPO, Comprador).
     /// </summary>
     [HttpPost("token")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult GerarToken([FromBody] GerarTokenRequest request)
     {
@@ -70,14 +73,18 @@ public class SegurancaAuditoriaController : ControllerBase
     /// <summary>
     /// Consulta a trilha de auditoria de segurança (AuditLog) contendo registros imutáveis de operações
     /// de negócio, compensações SAGA, bloqueios de concorrência e acessos a dados sensíveis LGPD.
+    /// Requer autenticação JWT com papel Admin ou DPO.
     /// </summary>
     [HttpGet("auditoria")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [Authorize(Roles = "Admin,DPO")]
+    [ProducesResponseType(typeof(IReadOnlyList<AuditLogResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListarLogsAuditoria(
         [FromQuery] int limite = 50,
         CancellationToken cancellationToken = default)
     {
-        var logs = await _auditLogRepository.ListarRecentesAsync(Math.Clamp(limite, 1, 500), cancellationToken);
+        var logs = await _auditoriaUseCase.ListarLogsRecentesAsync(limite, cancellationToken);
         return Ok(logs);
     }
 
@@ -85,6 +92,7 @@ public class SegurancaAuditoriaController : ControllerBase
     /// Retorna o manifesto técnico das regras de segurança de dados e proteção LGPD implementadas na plataforma.
     /// </summary>
     [HttpGet("politicas-lgpd")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult ObterPoliticasSegurancaLgpd()
     {
@@ -94,7 +102,7 @@ public class SegurancaAuditoriaController : ControllerBase
             CriptografiaEmRepouso = "AES-256-GCM (Authenticated Encryption with Associated Data) com Nonce aleatório de 96 bits e Tag de autenticação de 128 bits por registro.",
             IndexacaoCegaSegura = "HMAC-SHA256 determinístico (CpfHash e EmailHash) para validação de unicidade e busca indexada sem exposição de texto claro no banco de dados.",
             MascaramentoPorPadrao = "Privacy by Default: listagens e consultas padrão retornam CPF (***.456.789-**), E-mail, Telefone, RG, CNH e Endereço mascarados.",
-            ControleDeAcessoEAuditoria = "Todo acesso administrativo aos dados completos descriptografados para emissão de ATPV-e/NF ou portabilidade exige justificativa e gera registro imutável em AuditLog.",
+            ControleDeAcessoEAuditoria = "Endpoints críticos (/dados-completos, /inspecao-criptografia, /anonimizar, /auditoria) protegidos por JWT Bearer RBAC ([Authorize(Roles = ...)]) e auditados em AuditLog.",
             DireitosDoTitular = "Suporte nativo à Anonimização / Direito ao Esquecimento (POST /api/v1/compradores/{id}/anonimizar) e Portabilidade/Acesso Auditado.",
             PadraoTransacionalDistribuido = "SAGA Orquestrada com controle de concorrência otimista (RowVersion) + semáforo transacional por veículo e transações compensatórias automáticas."
         });

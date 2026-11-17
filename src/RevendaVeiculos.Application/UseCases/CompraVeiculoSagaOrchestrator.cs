@@ -57,6 +57,13 @@ public class CompraVeiculoSagaOrchestrator : ICompraVeiculoSagaOrchestrator
             var veiculo = await _veiculoRepository.ObterPorIdAsync(request.VeiculoId, cancellationToken)
                 ?? throw new RecursoNaoEncontradoException($"Veículo com ID {request.VeiculoId} não encontrado.");
 
+            var pedidoAtivoExistente = await _pedidoRepository.ObterPedidoAtivoPorVeiculoIdAsync(veiculo.Id, cancellationToken);
+            if (pedidoAtivoExistente is not null)
+            {
+                throw new ConflitoConcorrenciaException(
+                    $"Este veículo já possui uma reserva ativa em andamento ({pedidoAtivoExistente.CodigoReserva}) realizada por outro(a) comprador(a).");
+            }
+
             try
             {
                 veiculo.Reservar();
