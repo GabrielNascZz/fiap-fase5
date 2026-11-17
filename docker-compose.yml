@@ -1,0 +1,40 @@
+services:
+  revenda-db:
+    image: postgres:16-alpine
+    container_name: revenda_veiculos_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: revenda_veiculos_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-PostgresFase5StrongPwd!}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d revenda_veiculos_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata_revenda:/var/lib/postgresql/data
+
+  revenda-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: revenda_veiculos_api
+    restart: unless-stopped
+    depends_on:
+      revenda-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      UsePostgres: "true"
+      ConnectionStrings__DefaultConnection: "Host=revenda-db;Port=5432;Database=revenda_veiculos_db;Username=postgres;Password=${POSTGRES_PASSWORD:-PostgresFase5StrongPwd!}"
+      Security__MasterEncryptionKey: "${MASTER_ENCRYPTION_KEY:-FIAP-SOAT-FASE5-AES256-GCM-MASTER-KEY-2026-KMS-PROTECTED}"
+      Security__HmacDeterministicKey: "${HMAC_DETERMINISTIC_KEY:-FIAP-SOAT-FASE5-HMAC-SHA256-INDEX-KEY-2026-KMS-PROTECTED}"
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata_revenda:

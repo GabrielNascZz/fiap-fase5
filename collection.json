@@ -1,0 +1,167 @@
+{
+  "info": {
+    "name": "FIAP SOAT Fase 5 - Plataforma de Revenda de Veículos (SAGA & LGPD)",
+    "_postman_id": "f5a05555-2026-4b4e-8ca7-ddef6757f147",
+    "description": "Coleção completa de endpoints para testes da Plataforma de Revenda de Veículos Automotores (Veículos, Compradores/LGPD, Orquestração SAGA e Auditoria).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Estoque de Veículos",
+      "item": [
+        {
+          "name": "Listar Veículos à Venda (Ordenados do Mais Barato para o Mais Caro)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/veiculos/a-venda"
+          }
+        },
+        {
+          "name": "Listar Veículos Vendidos (Ordenados do Mais Barato para o Mais Caro)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/veiculos/vendidos"
+          }
+        },
+        {
+          "name": "Cadastrar Novo Veículo para Venda",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/veiculos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"marca\": \"Jeep\",\n  \"modelo\": \"Compass Longitude T270\",\n  \"anoFabricacao\": 2024,\n  \"anoModelo\": 2025,\n  \"cor\": \"Cinza Sting\",\n  \"preco\": 169900.00,\n  \"placa\": \"JEP8C99\",\n  \"chassi\": \"9886754321RP00987\",\n  \"renavam\": \"55667788991\",\n  \"quilometragem\": 3500,\n  \"combustivel\": \"Flex\",\n  \"cambio\": \"Automatico\",\n  \"descricao\": \"Único dono, garantia de fábrica até 2028.\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Cadastro de Compradores & Segurança LGPD",
+      "item": [
+        {
+          "name": "Listar Compradores (Dados Sensíveis Mascarados - Privacy by Default)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/compradores"
+          }
+        },
+        {
+          "name": "Cadastrar Comprador (Criptografia AES-256-GCM em Repouso)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/compradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nomeCompleto\": \"Fernanda Oliveira Lima\",\n  \"email\": \"fernanda.lima@cliente.com.br\",\n  \"telefone\": \"11988776655\",\n  \"dataNascimento\": \"1995-07-20T00:00:00Z\",\n  \"cpf\": \"39053344705\",\n  \"endereco\": {\n    \"cep\": \"04538133\",\n    \"logradouro\": \"Av Brigadeiro Faria Lima\",\n    \"numero\": \"3500\",\n    \"complemento\": \"Apto 82\",\n    \"bairro\": \"Itaim Bibi\",\n    \"cidade\": \"São Paulo\",\n    \"uf\": \"SP\"\n  },\n  \"rg\": {\n    \"numeroRg\": \"445566778\",\n    \"orgaoEmissor\": \"SSP\",\n    \"ufEmissor\": \"SP\"\n  },\n  \"cnh\": {\n    \"numeroRegistro\": \"11223344556\",\n    \"categoria\": \"AB\",\n    \"dataValidade\": \"2030-12-31T00:00:00Z\"\n  },\n  \"consentimentoLgpd\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Processo de Compra SAGA (Reserva, Pagamento, Retirada e Compensações)",
+      "item": [
+        {
+          "name": "Passo 1 e 2: Selecionar Veículo, Reservar e Emitir Código de Pagamento",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/compras/reservar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"veiculoId\": \"00000000-0000-0000-0000-000000000000\",\n  \"compradorId\": \"00000000-0000-0000-0000-000000000000\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Passo 3 (Sucesso): Confirmar Pagamento do Veículo",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/compras/{{pedidoId}}/pagamento",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigoPagamento\": \"PAY-PIX-...\",\n  \"pagamentoEfetuado\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Passo 3 (Falha / Compensação SAGA): Pagamento Não Efetuado -> Libera Veículo",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/compras/{{pedidoId}}/pagamento",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigoPagamento\": \"PAY-PIX-...\",\n  \"pagamentoEfetuado\": false,\n  \"motivoRecusa\": \"Pagamento não efetuado dentro do prazo.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Passo 4: Retirada do Veículo, Emissão de Documentação e Baixa no Estoque",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/compras/{{pedidoId}}/retirada",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmarAssinaturaTermoEntrega\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Exceção / Compensação SAGA: Cliente Desiste da Compra em Qualquer Passo",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/compras/{{pedidoId}}/desistir",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivoDesistencia\": \"Cliente desistiu da compra antes da retirada do veículo.\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Segurança, Autenticação JWT e Auditoria LGPD",
+      "item": [
+        {
+          "name": "Gerar Token JWT (RBAC)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/seguranca/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"gabriel.nascimento\",\n  \"role\": \"Admin\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Consultar Trilha de Auditoria Imutável (AuditLog)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/seguranca/auditoria?limite=50"
+          }
+        },
+        {
+          "name": "Consultar Políticas de Segurança e LGPD Ativas",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/seguranca/politicas-lgpd"
+          }
+        }
+      ]
+    }
+  ]
+}

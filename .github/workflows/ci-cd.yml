@@ -1,0 +1,28 @@
+name: CI/CD - Revenda de Veículos (FIAP SOAT Fase 5)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET 8.0 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restaurar Dependências
+        run: dotnet restore RevendaVeiculos.sln
+
+      - name: Compilar Solução (Clean Architecture)
+        run: dotnet build RevendaVeiculos.sln --configuration Release --no-restore
+
+      - name: Executar Testes Unitários e de Integração End-to-End (SAGA + LGPD)
+        run: dotnet test RevendaVeiculos.sln --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"
